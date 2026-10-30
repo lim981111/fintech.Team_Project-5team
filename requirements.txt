@@ -1,0 +1,20 @@
+#langchain
+langchain-core
+langchain-ollama
+
+# chromadb
+chromadb
+langchain-chroma
+#langchain-text-splitters
+
+# langgraph
+langgraph
+
+#fastapi
+fastapi
+apscheduler
+uvicorn
+
+#llama-index
+#llama-index-llms-ollama
+#llama-index-embeddings-ollama
