@@ -22,4 +22,4 @@ class State(TypedDict):
 def get_state():
     return StateGraph(State)
 
-#id, pw는 세션스토리지에서
+#id, pw는 세션스토리지에서 받아올 생각
