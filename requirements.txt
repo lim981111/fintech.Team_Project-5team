@@ -1,0 +1,22 @@
+# langchain
+langchain
+langchain-core
+langchain-ollama
+langchain-community
+
+# chromadb
+chromadb
+langchain-chroma
+#langchain-text-splitters
+
+# langgraph
+langgraph
+
+# fastapi & server
+fastapi
+apscheduler
+uvicorn
+
+# --- 새로 추가된 필수 패키지 ---
+requests           # 금감원 Open API 등 외부 API 호출용
+python-dotenv      # .env 파일에서 FSS_API_KEY 등 환경 변수 로드용
