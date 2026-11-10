@@ -36,6 +36,8 @@
         .message {
             margin-bottom: 12px;
             line-height: 1.4;
+            white-space: pre-wrap;      /* 답변 속 줄바꿈(\n)이 화면에 그대로 보이도록 */
+            word-break: break-word;
         }
         .message.user {
             text-align: right;
@@ -69,6 +71,10 @@
         button:hover {
             background: #0052a3;
         }
+        button:disabled {
+            background: #9db8d6;
+            cursor: not-allowed;
+        }
         .meta-info {
             font-size: 0.85em;
             color: #666;
@@ -76,6 +82,18 @@
             padding: 6px 10px;
             border-radius: 4px;
             margin-top: 4px;
+            white-space: normal;
+        }
+        .meta-info ul {
+            margin: 4px 0 0;
+            padding-left: 20px;
+        }
+        .meta-info a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        .meta-info a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -92,21 +110,47 @@
         <!-- 입력창 영역 -->
         <div class="input-group">
             <input type="text" id="userInput" placeholder="예: 스미싱 문자가 왔는데 어떻게 하나요?" onkeypress="if(event.key==='Enter') sendMessage()">
-            <button onclick="sendMessage()">전송</button>
+            <button id="sendBtn" onclick="sendMessage()">전송</button>
         </div>
     </div>
 
     <script>
+        // 화면에 넣는 모든 텍스트는 HTML로 해석되지 않도록 이스케이프
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // http/https 링크만 허용 (javascript: 같은 주소 차단)
+        function isSafeUrl(url) {
+            try {
+                const u = new URL(url);
+                return u.protocol === 'http:' || u.protocol === 'https:';
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function addHtml(chatBox, html) {
+            chatBox.insertAdjacentHTML('beforeend', html);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
         async function sendMessage() {
             const input = document.getElementById('userInput');
+            const sendBtn = document.getElementById('sendBtn');
             const chatBox = document.getElementById('chatBox');
             const text = input.value.trim();
             if (!text) return;
 
             // 1. 유저 메시지 화면에 출력
-            chatBox.innerHTML += `<div class="message user"><b>나:</b> ${text}</div>`;
+            addHtml(chatBox, `<div class="message user"><b>나:</b> ${escapeHtml(text)}</div>`);
             input.value = '';
-            chatBox.scrollTop = chatBox.scrollHeight;
+            sendBtn.disabled = true;
 
             try {
                 // 2. FastAPI 백엔드(`/api/chat`)로 요청 전송
@@ -116,21 +160,39 @@
                     body: JSON.stringify({ question: text })
                 });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
                 const data = await response.json();
 
                 // 3. AI 답변 출력
-                chatBox.innerHTML += `<div class="message bot"><b>AI:</b> ${data.answer}</div>`;
+                addHtml(chatBox, `<div class="message bot"><b>AI:</b> ${escapeHtml(data.answer)}</div>`);
 
-                // 4. 관련 교육 콘텐츠나 정책 링크가 있다면 함께 출력
-                if (data.contents && data.contents.length > 0) {
-                    chatBox.innerHTML += `<div class="message bot meta-info"><b>📌 관련 교육/정책:</b> ${data.contents.join(', ')}</div>`;
+                // 4-1. 관련 교육 프로그램 이름 목록 (policy: 문자열 배열)
+                if (Array.isArray(data.policy) && data.policy.length > 0) {
+                    const names = data.policy.map(escapeHtml).join(', ');
+                    addHtml(chatBox, `<div class="message bot meta-info"><b>📌 관련 교육/정책:</b> ${names}</div>`);
+                }
+
+                // 4-2. 영상/교육 링크 (contents: {title, url, type} 배열) → 클릭 가능한 링크로 출력
+                const links = (data.contents || []).filter(c => c && isSafeUrl(c.url));
+                if (links.length > 0) {
+                    const items = links.map(c => {
+                        const isVideo = c.type === 'video';
+                        const icon = isVideo ? '🎬' : '🔗';
+                        const label = isVideo ? '영상' : '교육 페이지';
+                        const title = escapeHtml(c.title || c.url);
+                        return `<li>${icon} <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${title}</a> (${label})</li>`;
+                    }).join('');
+                    addHtml(chatBox, `<div class="message bot meta-info"><b>🎬 관련 영상/교육 링크:</b><ul>${items}</ul></div>`);
                 }
 
             } catch (error) {
-                chatBox.innerHTML += `<div class="message bot" style="color: red;"><b>시스템:</b> 서버와 통신 중 오류가 발생했습니다.</div>`;
+                addHtml(chatBox, `<div class="message bot" style="color: red;"><b>시스템:</b> 서버와 통신 중 오류가 발생했습니다.</div>`);
+            } finally {
+                sendBtn.disabled = false;
+                input.focus();
             }
-
-            chatBox.scrollTop = chatBox.scrollHeight;
         }
     </script>
 </body>
