@@ -65,46 +65,91 @@ def clean_html_and_extract_links(raw_html):
   return clean_text, extracted_links
 
 
+def _clean(value):
+  """짧은 텍스트 필드에 혹시 섞인 HTML을 제거"""
+  text, _ = clean_html_and_extract_links(_as_text(value))
+  return text
+
+
+def _line(label, value):
+  return f"{label}: {value}" if value else None
+
+
 def _parse_item(item):
-  """API 응답의 항목 하나를 RAG용 딕셔너리로 변환"""
-  title = _as_text(item.get("programName"), "금융 교육 프로그램")
-  institution = "금융감독원"
-  target_audience = _as_text(item.get("target"), "청년/전국민")
-  period = _as_text(item.get("eduPrd"), "상시접수")
+  """API 응답의 항목 하나를 RAG용 딕셔너리로 변환한다.
 
-  api_url = _as_text(
-      item.get("url") or item.get("link") or item.get("homepage"), ""
-  )
-  clean_content, html_links = clean_html_and_extract_links(
-      _as_text(item.get("cntnt"), "")
+  실제 응답에서 확인된 필드:
+    programName(프로그램명), dscrtCntnt(개요), cntnt(상세 HTML), url(상대 경로),
+    eduTmeCntnt(교육 시간), aplyMthdCntnt(신청 방법), inquiriesCntnt(문의처)
+  eduTrgtCntnt는 'Y' 같은 값이라 교육 대상 설명이 아니므로 사용하지 않는다.
+  (예전 코드의 target/eduPrd 필드는 실제 응답에 없어 항상 기본값만 들어갔다.)
+  """
+  title = _clean(item.get("programName")) or "금융 교육 프로그램"
+  summary = _clean(item.get("dscrtCntnt"))
+  duration = _clean(item.get("eduTmeCntnt"))
+  apply_method = _clean(item.get("aplyMthdCntnt"))
+  contact = _clean(item.get("inquiriesCntnt"))
+
+  raw_url = _as_text(
+      item.get("url") or item.get("link") or item.get("homepage")
+  ).strip()
+  program_url = urljoin(FSS_BASE_URL, raw_url) if raw_url else ""
+
+  detail_text, html_links = clean_html_and_extract_links(
+      _as_text(item.get("cntnt"))
   )
 
-  # 링크 통합 + 중복 제거 (순서 유지, http(s)만 허용)
-  all_links = ([urljoin(FSS_BASE_URL, api_url)] if api_url else []) + html_links
+  # 링크 통합 + 중복 제거 (순서 유지, http(s)만 허용). 프로그램 페이지가 맨 앞.
+  all_links = ([program_url] if program_url else []) + html_links
   valid_links = [
       link for link in dict.fromkeys(all_links) if link.startswith("http")
   ]
 
-  content_parts = [
-      f"교육 프로그램명: {title}",
-      f"주관 기관: {institution}",
-      f"교육 대상: {target_audience}",
-      f"신청 기간: {period}",
-      f"상세 설명: {clean_content if clean_content else '설명 내용이 없습니다.'}",
-  ]
-  if valid_links:
-    content_parts.append(f"관련 영상 및 교육 링크: {', '.join(valid_links)}")
+  # 검색/임베딩용 전체 본문
+  content = "\n".join(
+      part
+      for part in (
+          _line("교육 프로그램명", title),
+          _line("주관 기관", "금융감독원"),
+          _line("개요", summary),
+          _line("교육 시간", duration),
+          _line("신청 방법", apply_method),
+          _line("문의처", contact),
+          _line("상세 설명", detail_text),
+          _line("관련 영상 및 교육 링크", ", ".join(valid_links)),
+      )
+      if part
+  )
+
+  # 답변에 보여줄 간단한 본문 (상세 설명은 길어서 제외)
+  fallback_summary = detail_text[:200] + ("…" if len(detail_text) > 200 else "")
+  display_text = "\n".join(
+      part
+      for part in (
+          _line("교육 프로그램명", title),
+          _line("개요", summary or fallback_summary),
+          _line("교육 시간", duration),
+          _line("신청 방법", apply_method),
+          _line("문의처", contact),
+          _line("자세히 보기", program_url),
+      )
+      if part
+  )
 
   return {
       "metadata": {
           "title": title,
-          "institution": institution,
-          "target_audience": target_audience,
-          "period": period,
+          "institution": "금융감독원",
+          "summary": summary,
+          "duration": duration,
+          "apply_method": apply_method,
+          "contact": contact,
+          "url": program_url,
           "links": valid_links,
       },
       "source": "금감원 교육 API",
-      "content": "\n".join(content_parts),
+      "content": content,
+      "display_text": display_text,
   }
 
 
@@ -227,9 +272,25 @@ def _bigrams(text):
   return grams
 
 
+# 검색어에 섞이면 엉뚱한 항목이 걸리는 군더더기 표현
+_QUERY_FILLER = (
+    "알려주세요", "알려줘", "알려", "추천해줘", "추천", "해주세요", "해줘", "싶어요",
+    "있나요", "있어요", "어떻게", "어디서", "어디", "뭐가", "무엇", "관련", "정보", "좀",
+)
+
+
+def _strip_filler(query):
+  for word in _QUERY_FILLER:
+    query = query.replace(word, " ")
+  return query
+
+
 def search_fss_edu(query, data, top_k=4):
-  """질문과 관련도가 높은 교육 프로그램을 점수순으로 반환 (일치 항목이 없으면 [])"""
-  query_grams = _bigrams(query)
+  """질문과 관련도가 높은 항목(교육 프로그램, 복지 서비스)을 점수순으로 반환 (일치 항목이 없으면 [])
+
+  교육과 복지 데이터가 같은 모양(metadata.title/summary, content)이라 둘 다 이 함수를 쓴다.
+  """
+  query_grams = _bigrams(_strip_filler(query))
   if not query_grams:
     return []
 
@@ -237,12 +298,12 @@ def search_fss_edu(query, data, top_k=4):
   for item in data:
     meta = item.get("metadata", {})
     title_grams = _bigrams(meta.get("title", ""))
-    target_grams = _bigrams(meta.get("target_audience", ""))
+    summary_grams = _bigrams(meta.get("summary", ""))
     content_grams = _bigrams(item.get("content", ""))
 
     score = (
         3 * len(query_grams & title_grams)
-        + 2 * len(query_grams & target_grams)
+        + 2 * len(query_grams & summary_grams)
         + len(query_grams & content_grams)
     )
     if score > 0:

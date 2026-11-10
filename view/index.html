@@ -104,7 +104,7 @@
 
         <!-- 대화 화면 영역 -->
         <div class="chat-box" id="chatBox">
-            <div class="message bot"><b>AI:</b> 안녕하세요! 무엇을 도와드릴까요? 궁금한 금융 정책이나 교육 정보를 물어보세요.</div>
+            <div class="message bot"><b>AI:</b> 안녕하세요! 무엇을 도와드릴까요? 금융 교육, 복지 서비스, 예·적금 금리를 물어보세요.</div>
         </div>
 
         <!-- 입력창 영역 -->
@@ -180,11 +180,12 @@
                     const items = links.map(c => {
                         const isVideo = c.type === 'video';
                         const icon = isVideo ? '🎬' : '🔗';
-                        const label = isVideo ? '영상' : '교육 페이지';
+                        // 서버가 보내준 설명(label)을 우선 사용: 교육 페이지 / 복지로 상세 / 신청·관련 사이트 / 영상
+                        const label = escapeHtml(c.label || (isVideo ? '영상' : '교육 페이지'));
                         const title = escapeHtml(c.title || c.url);
                         return `<li>${icon} <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">${title}</a> (${label})</li>`;
                     }).join('');
-                    addHtml(chatBox, `<div class="message bot meta-info"><b>🎬 관련 영상/교육 링크:</b><ul>${items}</ul></div>`);
+                    addHtml(chatBox, `<div class="message bot meta-info"><b>🔗 관련 링크:</b><ul>${items}</ul></div>`);
                 }
 
             } catch (error) {

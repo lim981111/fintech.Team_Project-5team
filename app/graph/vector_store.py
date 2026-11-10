@@ -1,8 +1,13 @@
-"""금감원 교육 데이터를 ChromaDB(벡터 DB)에 저장하고 검색하는 모듈.
+"""교육/복지 데이터를 ChromaDB(벡터 DB)에 저장하고 검색하는 모듈.
+
+출처(source)마다 컬렉션을 따로 둔다.
+    "edu"     → 컬렉션 fss_edu           (금감원 교육 프로그램)
+    "welfare" → 컬렉션 welfare_services  (복지로 중앙부처복지서비스)
+금융상품은 금리 정렬이 핵심이라 벡터 DB를 쓰지 않는다. (product_search.py)
 
 사용법
-  - 데이터 적재(재구축): 프로젝트 루트에서  python -m app.graph.vector_store
-  - 검색:                from app.graph.vector_store import search_vector
+  - 전체 갱신(API 호출 + 벡터 DB 재구축): python -m app.graph.ingest_all
+  - 저장본으로 벡터 DB만 재구축(API 호출 없음): python -m app.graph.vector_store
 """
 
 import hashlib
@@ -13,12 +18,9 @@ from functools import lru_cache
 import chromadb
 from chromadb.utils import embedding_functions
 
-# load_dotenv()가 api_ingestion 임포트 시 실행되므로, 아래 os.getenv보다 먼저 임포트
-from app.graph.api_ingestion import (
-    fetch_and_save_fss_data,
-    get_fss_edu_rag_data,
-    load_local_data,
-)
+# load_dotenv()가 임포트 시 실행되므로, 아래 os.getenv보다 먼저 임포트
+from app.graph.api_ingestion import get_fss_edu_rag_data, load_local_data
+from app.graph.welfare_ingestion import load_local_welfare
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,8 @@ BASE_DIR = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 CHROMA_DIR = os.getenv("CHROMA_DIR", os.path.join(BASE_DIR, "chroma_db"))
-COLLECTION_NAME = "fss_edu"
+
+COLLECTIONS = {"edu": "fss_edu", "welfare": "welfare_services"}
 
 # 한국어 지원 임베딩 모델 (최초 실행 시 HuggingFace에서 다운로드됨)
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "jhgan/ko-sroberta-multitask")
@@ -52,18 +55,23 @@ def _get_embedding_function():
   )
 
 
-def _get_collection():
+def _get_collection(source="edu"):
   return _get_client().get_or_create_collection(
-      name=COLLECTION_NAME,
+      name=COLLECTIONS[source],
       embedding_function=_get_embedding_function(),
       metadata={"hnsw:space": "cosine"},
   )
 
 
-def _program_id(item):
-  """제목+신청기간으로 만든 고정 ID (재실행해도 같은 프로그램은 같은 ID)"""
+def _item_id(item):
+  """항목의 고정 ID (재실행해도 같은 항목은 같은 ID).
+
+  복지는 서비스 ID(serv_id), 교육은 제목+프로그램 페이지 주소로 만든다.
+  """
   meta = item.get("metadata", {})
-  raw = f"{meta.get('title', '')}|{meta.get('period', '')}"
+  if meta.get("serv_id"):
+    return "w" + str(meta["serv_id"])
+  raw = f"{meta.get('title', '')}|{meta.get('url', '')}"
   return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
 
@@ -83,39 +91,46 @@ def _chunk_text(text, size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
   return chunks
 
 
-def ingest_fss_data(data, rebuild=True):
-  """교육 프로그램 리스트를 청크로 나눠 벡터 DB에 저장. 저장된 청크 총 개수를 반환.
+def _load_items(source):
+  """저장된 데이터를 읽는다. (교육은 저장본이 하나도 없을 때만 API를 1회 호출)"""
+  if source == "welfare":
+    return load_local_welfare()
+  return get_fss_edu_rag_data()
 
-  rebuild=True 이면 기존 컬렉션을 지우고 새로 만들어, API에서 사라진 프로그램이
+
+def ingest_fss_data(data, rebuild=True, source="edu"):
+  """항목 리스트를 청크로 나눠 벡터 DB에 저장. 저장된 청크 총 개수를 반환.
+
+  rebuild=True 이면 기존 컬렉션을 지우고 새로 만들어, API에서 사라진 항목이
   벡터 DB에 남지 않도록 한다.
   """
   if not data:
-    logger.warning("저장할 데이터가 없습니다.")
+    logger.warning("[%s] 저장할 데이터가 없습니다.", source)
     return 0
 
   if rebuild:
     try:
-      _get_client().delete_collection(COLLECTION_NAME)
+      _get_client().delete_collection(COLLECTIONS[source])
     except Exception:
       pass  # 컬렉션이 아직 없으면 무시
 
-  collection = _get_collection()
+  collection = _get_collection(source)
 
   ids, documents, metadatas = [], [], []
   seen = set()
   for item in data:
-    pid = _program_id(item)
-    if pid in seen:  # 제목+기간이 같은 중복 항목 방지 (Chroma는 배치 내 중복 ID 불가)
-      logger.warning("중복 프로그램 건너뜀: %s", item["metadata"].get("title"))
+    item_id = _item_id(item)
+    if item_id in seen:  # Chroma는 배치 내 중복 ID 불가
+      logger.warning("중복 항목 건너뜀: %s", item["metadata"].get("title"))
       continue
-    seen.add(pid)
+    seen.add(item_id)
 
     title = item["metadata"].get("title", "")
     for i, chunk in enumerate(_chunk_text(item.get("content", ""))):
-      ids.append(f"{pid}:{i}")
-      # 첫 청크에는 이미 프로그램명이 있으므로, 나머지 청크에만 제목을 붙여 문맥 유지
+      ids.append(f"{item_id}:{i}")
+      # 첫 청크에는 이미 이름이 있으므로, 나머지 청크에만 제목을 붙여 문맥 유지
       documents.append(chunk if i == 0 else f"[{title}] {chunk}")
-      metadatas.append({"program_id": pid, "title": title, "chunk": i})
+      metadatas.append({"program_id": item_id, "title": title, "chunk": i})
 
   for start in range(0, len(ids), UPSERT_BATCH):
     end = start + UPSERT_BATCH
@@ -126,33 +141,33 @@ def ingest_fss_data(data, rebuild=True):
     )
 
   total = collection.count()
-  logger.info("벡터 DB 저장 완료: 프로그램 %d개 / 청크 %d개", len(seen), total)
+  logger.info("[%s] 벡터 DB 저장 완료: 항목 %d개 / 청크 %d개", source, len(seen), total)
   return total
 
 
-def ensure_vector_db():
-  """벡터 DB가 비어 있으면 캐시/API 데이터를 읽어 적재 (서버 시작 시 호출)"""
-  if _get_collection().count() > 0:
+def ensure_vector_db(source="edu"):
+  """벡터 DB가 비어 있으면 저장된 데이터를 읽어 적재 (서버 시작 시 호출)"""
+  if _get_collection(source).count() > 0:
     return
-  data = get_fss_edu_rag_data()
+  data = _load_items(source)
   if not data:
-    logger.warning("벡터 DB가 비어 있지만 적재할 원본 데이터도 없습니다.")
+    logger.warning("[%s] 벡터 DB가 비어 있지만 적재할 원본 데이터도 없습니다.", source)
     return
-  ingest_fss_data(data, rebuild=False)
+  ingest_fss_data(data, rebuild=False, source=source)
 
 
-def search_vector(query, top_k=4, data=None):
-  """질문과 의미가 가까운 교육 프로그램을 반환 (원본 데이터 딕셔너리 형태 그대로)"""
-  collection = _get_collection()
+def search_vector(query, top_k=4, data=None, source="edu"):
+  """질문과 의미가 가까운 항목을 반환 (원본 데이터 딕셔너리 형태 그대로)"""
+  collection = _get_collection(source)
   count = collection.count()
   if count == 0 or not (query or "").strip():
     return []
 
   if data is None:
-    data = load_local_data()  # 로컬 저장본만 사용 (API 호출 없음)
-  by_id = {_program_id(d): d for d in data}
+    data = load_local_welfare() if source == "welfare" else load_local_data()
+  by_id = {_item_id(d): d for d in data}
 
-  # 한 프로그램이 여러 청크로 걸릴 수 있어 넉넉히 가져온 뒤 프로그램 단위로 합침
+  # 한 항목이 여러 청크로 걸릴 수 있어 넉넉히 가져온 뒤 항목 단위로 합침
   res = collection.query(
       query_texts=[query],
       n_results=min(top_k * 3, count),
@@ -161,51 +176,42 @@ def search_vector(query, top_k=4, data=None):
 
   results, seen = [], set()
   for meta, dist in zip(res["metadatas"][0], res["distances"][0]):
-    logger.debug("distance=%.3f title=%s", dist, meta.get("title"))
+    logger.debug("[%s] distance=%.3f title=%s", source, dist, meta.get("title"))
     if dist > MAX_DISTANCE:
       break  # 거리순 정렬이므로 이후는 모두 더 멀다
-    pid = meta["program_id"]
-    if pid in seen or pid not in by_id:
+    item_id = meta["program_id"]
+    if item_id in seen or item_id not in by_id:
       continue
-    seen.add(pid)
-    results.append(by_id[pid])
+    seen.add(item_id)
+    results.append(by_id[item_id])
     if len(results) >= top_k:
       break
   return results
 
 
 # ==========================================
-# 🧪 단독 실행: (선택) API 갱신 → 벡터 DB 재구축 → 검색 테스트
-#   python -m app.graph.vector_store            # API로 최신 데이터 갱신 후 적재
-#   python -m app.graph.vector_store --offline  # API 호출 없이 저장된 데이터로만 적재
+# 🧪 단독 실행: 저장본으로 벡터 DB 재구축 + 검색 테스트 (API 호출 없음)
+#   API까지 새로 받으려면 `python -m app.graph.ingest_all` 을 사용하세요.
 # ==========================================
 if __name__ == "__main__":
-  import sys
-
   logging.basicConfig(level=logging.INFO)
 
-  if "--offline" in sys.argv:
-    source = load_local_data()
-    print(f"[정보] 오프라인 모드: 저장된 데이터 {len(source)}건 사용")
-  else:
-    source = fetch_and_save_fss_data()  # 명시적 갱신 (실패 시 기존 저장본 유지)
-    if not source:
-      source = load_local_data()
-      print(f"[경고] API 갱신 실패 - 기존 저장본 {len(source)}건으로 진행")
-    else:
-      print(f"[정보] API에서 {len(source)}건 갱신 후 저장")
+  tests = {
+      "edu": ("청년 투자", "대출 사기 예방"),
+      "welfare": ("청년 월세 지원", "출산 양육 지원"),
+  }
+  for source_name, queries in tests.items():
+    source_data = load_local_welfare() if source_name == "welfare" else load_local_data()
+    if not source_data:
+      print(f"[{source_name}] 저장된 데이터가 없어 건너뜁니다.")
+      continue
 
-  if not source:
-    print("[중단] 적재할 데이터가 없습니다. FSS_API_KEY와 네트워크를 확인하세요.")
-    sys.exit(1)
-
-  total_chunks = ingest_fss_data(source, rebuild=True)
-  print(f"[성공] 벡터 DB 저장 완료: 청크 {total_chunks}개 ({CHROMA_DIR})")
-
-  for q in ("청년 투자", "대출 사기 예방", "노후 준비"):
-    print(f"\n--- 검색 테스트: '{q}' ---")
-    hits = search_vector(q, top_k=3, data=source)
-    if not hits:
-      print("  (결과 없음 - VECTOR_MAX_DISTANCE를 높여 보세요)")
-    for h in hits:
-      print(f"  - {h['metadata']['title']}")
+    chunks = ingest_fss_data(source_data, rebuild=True, source=source_name)
+    print(f"[{source_name}] 저장 완료: 항목 {len(source_data)}건 / 청크 {chunks}개 ({CHROMA_DIR})")
+    for q in queries:
+      print(f"  --- 검색 테스트: '{q}' ---")
+      hits = search_vector(q, top_k=3, data=source_data, source=source_name)
+      if not hits:
+        print("    (결과 없음 - VECTOR_MAX_DISTANCE를 높여 보세요)")
+      for h in hits:
+        print(f"    - {h['metadata']['title']}")
