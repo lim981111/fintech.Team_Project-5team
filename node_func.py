@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 
 from dotenv import load_dotenv
@@ -5,6 +6,7 @@ from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_tavily import TavilySearch
+from datetime import datetime
 
 from state import State
 from rag.rag_search import search_docs
@@ -182,6 +184,11 @@ def check_answer(state: State):
 def web_answer_node(state:State):
     print('tavily로 web검색 후 응답')
 
+    
+
+    # web_answer_node 내부에서 오늘 날짜 생성
+    today = datetime.now().strftime("%Y년 %m월 %d일")
+
     ratio = get_income_ratio(state['monthly_income'], state['household_size'])
     ratio_text = f"기준 중위소득의 약 {round(ratio)}%" if ratio is not None else "알 수 없음"
 
@@ -190,7 +197,7 @@ def web_answer_node(state:State):
     result = search.invoke({'query':question})
     text = ''
     for r in result['results']:
-        text += f"{r['title']}\n{r['url']}\n{r['content'][:600]}\n\n"
+        text += f"{r['title']}\n{r['url']}\n{r['content'][:800]}\n\n"
 
     sys_prompt = """
         당신은 주어진 [웹 검색 결과]를 바탕으로 질문에 답하는 금융 전문 상담전문가 입니다.
@@ -201,6 +208,8 @@ def web_answer_node(state:State):
         [웹 검색 결과]를 바탕으로 사용자가 이해하기 쉬운 단어와 문장으로 친절하게 답변해주세요.
         [웹 검색 결과]가 질문에 답하기에 자료가 부족하다면 
         "찾지 못했습니다. 다른 방식으로 질문해 주시겠어요?"와 같은 안내 문구를 답하세요
+
+        최우선적으로 [오늘 날짜]를 고려하여 검색 결과에 나온 정책이 현재 이미 시행 중인지, 향후 출시 예정인 정책인지 시점을 반드시 구분하여 정확히 안내하세요.
         
         [출력 규칙]
         - 반드시 한국어로 답변하세요
@@ -209,7 +218,10 @@ def web_answer_node(state:State):
         - 최대한 쉬운 단어와 문장으로 답변하세요
         - 검색결과에 없는 내용은 추측하지 마세요
         - 정확한 내용은 공식기관에서 확인하라고 안내해 주세요
-        - 공식기관에서 확인하라고 안내시, [웹 검색 결과]에 있는 URL만 포함하고 없는 URL은 절대 만들지 마세요
+        - 안내 시 [웹 검색 결과]에 실제로 존재하는 URL을 반드시 함께 포함하여 출력하세요 (없는 URL을 임의로 지어내지 말고, 검색 결과에 명시된 URL만 그대로 사용하세요)
+        - 답변은 길게 늘리지 말고 요점 위주로 간결하게 작성하세요
+        - **사용자의 질문 의도를 최우선으로 파악하세요.** 예를들어 사용자가 아파트 구입을 원하는데, 검색된 정책이 비아파트 전용이거나 엉뚱한 조건이라면 과감하게 제외하거나 부가 설명으로만 짧게 언급하고, 진짜 아파트에 쓸 수 있는 정책(보금자리론, 디딤돌 등) 위주로 답변하세요.
+        - 뜬금없는 정책을 메인으로 끌고 와서 "근데 이건 안 됩니다"라고 맥을 끊는 답변을 하지 마세요. 처음부터 사용자의 조건(아파트 구입 여부 등)에 맞는 실질적인 대출 상품을 중심으로 안내하세요.
 
         
         [사용자 정보]
@@ -220,6 +232,10 @@ def web_answer_node(state:State):
         - 가족 구성원 수 : {household_size}명
         - 금융 이해도 점수 : {score}점
         - 중위소득비율 : {ratio_text}
+
+
+        [오늘 날짜]
+        {today}
 
         [웹 검색 결과]
         {text}
@@ -240,6 +256,7 @@ def web_answer_node(state:State):
         "score": state['score'],
         "ratio_text": ratio_text,
         "text": text,
+        "today": today
     })
 
     return {"answer": result}
