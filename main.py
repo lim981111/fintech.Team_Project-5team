@@ -36,6 +36,6 @@ wf.add_edge("web", END)
 
 gold = wf.compile()
 
-@app.get("/")
-def main():
-    return RedirectResponse("/view/index.html")
+#@app.get("/")
+#def main():
+#    return RedirectResponse("/view/index.html")
