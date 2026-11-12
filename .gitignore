@@ -1,0 +1,41 @@
+# Python Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment Variables & Secrets
+.env
+
+# Python Cache Files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# VS Code / IDE Settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Generated Files
+Thumbs.db
+.DS_Store

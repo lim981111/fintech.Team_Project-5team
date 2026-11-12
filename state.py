@@ -8,13 +8,14 @@ class State(TypedDict):
 
     age : int           #나이
     job : str           #직업
-    mouthly_income : int#월 소득
+    monthly_income : int#월 소득
     total_assets : int  #총 자산
     household_size : int#가족 구성원 수
     score : int         #금융 이해도 점수
 
     policy : List[Any]  #취약계층 정책rag검색결과
     data : list[Any]    #금융정보 rag검색결과
+    history : List[Any] #최근 대화 내역
     contents : List[Any]#금융교육 콘텐츠
     language : str      #다국어 지원용
 
