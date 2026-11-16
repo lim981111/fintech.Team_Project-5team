@@ -1,12 +1,23 @@
-from fastapi import FastAPI,Request
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.responses import RedirectResponse
 from starlette.staticfiles import StaticFiles
 from langgraph.graph import START, END
 from node_func import *
+from sidebar_ai import *
 from state import *
 
 app = FastAPI()
+
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 #app.mount("/view", StaticFiles(directory="view"))
 
@@ -36,6 +47,18 @@ wf.add_conditional_edges(
 wf.add_edge("web", END)
 
 money = wf.compile()
+
+side_wf = get_side_state()
+
+side_wf.add_node("init", init_answer)
+side_wf.add_node("last", last_answer)
+
+side_wf.set_entry_point("init")
+
+side_wf.add_edge("init", "last")
+side_wf.add_edge("last", END)
+
+side = side_wf.compile()
 
 @app.get("/")
 def main():
@@ -67,4 +90,20 @@ async def chat_endpoint(req: ChatRequest):
     }
     
     result = money.invoke(initial_state)
+    return {"answer": result.get("answer", "")}
+
+class SideChatRequest(BaseModel):
+    question: str
+
+@app.post("/side_chat")
+async def side_chat_endpoint(req: SideChatRequest):
+    
+    side_state = {
+        "question": req.question,
+        "answer": "",
+        "language": "ko",
+        "contents": ""
+    }
+    
+    result = side.invoke(side_state)
     return {"answer": result.get("answer", "")}

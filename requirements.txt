@@ -7,6 +7,7 @@ langchain-community
 # --- ChromaDB & Vector Store ---
 chromadb
 langchain-chroma
+llama-index-vector-stores-chroma
 #langchain-text-splitters
 
 # --- LangGraph ---
@@ -20,6 +21,15 @@ fastapi
 apscheduler
 uvicorn
 
+#llama-index
+llama-index-core
+llama-index-llms-ollama
+llama-index-embeddings-ollama
+
+pymupdf
+llama-index-readers-file
+
+
 # --- Database (MariaDB / MySQL 연동용) ---
 PyMySQL
 SQLAlchemy
@@ -32,3 +42,4 @@ xmltodict          # 서민금융진흥원 등 XML 응답 데이터를 딕셔너
 beautifulsoup4
 
 torch
+PDFReader

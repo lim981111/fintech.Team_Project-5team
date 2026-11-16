@@ -23,4 +23,13 @@ class State(TypedDict):
 def get_state():
     return StateGraph(State)
 
+class SideState(TypedDict):
+    question: str
+    answer: str
+    language: str
+    contents: str
+
+def get_side_state():
+    return StateGraph(SideState)
+
 #id, pw는 세션스토리지에서 받아올 생각

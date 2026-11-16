@@ -1,5 +1,5 @@
 from datetime import datetime
-import os
+import time
 
 from dotenv import load_dotenv
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
@@ -19,15 +19,35 @@ from rag.rag_search import search_docs
 load_dotenv()
 
 # 모델1. router에서 분기에 사용할 LLM
-route_llm = ChatOllama(model="gemma4:e4b", format='json')
+route_llm = ChatOllama(model="gemma4:e4b", keep_alive="30m", format='json')
 # 모델2. 최종 응답을 해줄 LLM
-llm = ChatOllama(model="gemma4:e4b",num_ctx=8192)
+# keep_alive로 임베딩모델과 채팅모델을 번걸아서 호출할때 모델을 내렸다 올렸다 하지 않게
+llm = ChatOllama(model="gemma4:e4b", keep_alive="30m", num_ctx=8192)
+
+def timed(name):
+    def deco(fn):
+        def wrapper(state):
+            t = time.perf_counter()
+            out = fn(state)
+            print(f"[{name}] {time.perf_counter() - t:.1f}초")
+            return out
+        return wrapper
+    return deco
 
 # 노드 설정
 
 # 라우터
+@timed("router")
 def router(state: State):
     print('router로 분류')
+    # 금융 관련 단어가 들어있으면 무조건 rag로
+    FINANCE_WORDS = ("금융", "대출", "예금", "적금", "금리", "청약", "보험", "연금",
+                 "주택", "아파트", "전세", "월세", "정책", "지원", "신용", "카드",
+                 "투자", "주식", "세금", "소득", "자산", "복지", "수당")
+
+    if any(w in state['question'] for w in FINANCE_WORDS):
+        return 'rag'
+    
     sys_prompt = """
         당신은 사용자의 [질문]을 분석하여 올바른 답변 경로(Route)를 판단하는 라우팅전문가 입니다.
         
@@ -112,12 +132,15 @@ def get_income_ratio(income: int, household_size: int):
     return income / median * 100
 
 # rag 응답
+@timed("rag")
 def rag_answer_node(state: State):
     print('rag 검색 후 응답')
+    t = time.perf_counter()
     policy_docs = search_docs("policy", state['question'])    
     data_docs = search_docs("data", state['question'])
     policy = "\n\n".join(d.page_content for d in policy_docs) or "(관련 자료 없음)"
     data = "\n\n".join(d.page_content for d in data_docs) or "(관련 자료 없음)"
+    print(f"  검색 {time.perf_counter() - t:.1f}초")
 
     ratio = get_income_ratio(state['monthly_income'], state['household_size']) 
 
@@ -134,6 +157,9 @@ def rag_answer_node(state: State):
         [정책]과 [금융정보]가 모두 "(관련 자료 없음)"이거나, 질문에 답하기에 자료가 부족하다면
         다른 말은 하지 말고 반드시 빈칸("")만 답하세요
         
+        만약 [정책],[금융정보],[나이],[월 소득],[총 자산],[가족구성원수],[중위소득비율] 중
+        비어있거나 알 수 없는 값이 있다면, 그 부분은 무시하고 답변하세요.
+
         [출력 규칙]
         - 반드시 한국어로 답변하세요
         - 반드시 존댓말을 사용하세요
@@ -174,6 +200,7 @@ def rag_answer_node(state: State):
         "policy": policy,
         "data": data,
     })
+    print(f"  검색 {time.perf_counter() - t:.1f}초")
     return {"answer": result}
 
 def check_answer(state: State):
@@ -181,10 +208,9 @@ def check_answer(state: State):
     return "web" if answer == "" else "end"
     
 # tavily 응답
+@timed("web")
 def web_answer_node(state:State):
     print('tavily로 web검색 후 응답')
-
-    
 
     # web_answer_node 내부에서 오늘 날짜 생성
     today = datetime.now().strftime("%Y년 %m월 %d일")
