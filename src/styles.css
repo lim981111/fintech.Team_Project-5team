@@ -20,6 +20,12 @@
   --shadow: 0 18px 50px rgba(19, 61, 55, .12);
 }
 
+.message p, .term-message p {
+  white-space: pre-wrap;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
 * { box-sizing: border-box; }
 html { background: #eef3f1; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
@@ -180,3 +186,11 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(36, 173, 148
   .term-side-toggle { width: 48px; min-height: 48px; height: 48px; }
   .term-drawer { width: 94vw; }
 }
+
+/* 상담 화면: 높이를 화면에 고정하고 메시지 목록만 안에서 스크롤 */
+.screen.chat-screen { height: calc(100dvh - 140px); min-height: 0; overflow: hidden; }
+.chat-screen .chat-tools,
+.chat-screen .chat-day,
+.chat-screen .question-chips,
+.chat-screen .message-form { flex: none; }
+.chat-screen .messages { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }

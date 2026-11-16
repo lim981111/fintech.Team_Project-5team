@@ -1,4 +1,6 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { askConsult, askTerm, TEST_PROFILE } from "./api";
+
 import {
   ArrowLeft,
   ArrowRight,
@@ -158,6 +160,7 @@ function HomeScreen({ onNavigate, openTerms, loggedIn }: { onNavigate: (s: Scree
 }
 
 function ConsultScreen() {
+  const [loading, setLoading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [input, setInput] = useState("");
   const [histories, setHistories] = useState<string[]>([]);
@@ -166,19 +169,32 @@ function ConsultScreen() {
     { role: "ai", text: "안녕하세요, 임종원 님. 소득과 자산에 맞는 금융 정보를 찾아드릴게요. 무엇이 궁금하세요?" },
   ]);
 
-  const send = (event: FormEvent) => {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  const send = async (event: FormEvent) => {
     event.preventDefault();
-    if (!input.trim() || historyOpen) return;
+    if (!input.trim() || historyOpen || loading) return;
     const question = input.trim();
     if (!currentStarted) {
       const title = question.length > 18 ? `${question.slice(0, 18)}…` : question;
       setHistories((items) => [title, ...items]);
       setCurrentStarted(true);
     }
-    setMessages((items) => [...items, { role: "user", text: question }, { role: "ai", text: "질문을 확인했어요. 등록된 프로필을 기준으로 필요한 금융 정보를 차근차근 안내해 드릴게요." }]);
+    setMessages((items) => [...items, { role: "user", text: question }]);
     setInput("");
+    setLoading(true);
+    try {
+      const answer = await askConsult(question, TEST_PROFILE);
+      setMessages((items) => [...items, { role: "ai", text: answer || "답변을 만들지 못했어요. 다시 질문해 주세요." }]);
+    } catch {
+      setMessages((items) => [...items, { role: "ai", text: "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요." }]);
+    } finally {
+      setLoading(false);
+    }
   };
-
   return (
     <>
       <TopBar
@@ -201,6 +217,7 @@ function ConsultScreen() {
               </div>
             </div>
           ))}
+          <div ref={bottomRef} />
         </div>
         <div className="question-chips">
           {["필요 서류는?", "내가 받을 수 있어?", "신청 방법 알려줘"].map((item) => <button onClick={() => setInput(item)} key={item}>{item}</button>)}
@@ -361,20 +378,25 @@ function QuizScreen({ onDone, onExit }: { onDone: () => void; onExit: () => void
 }
 
 function TermChat({ onClose }: { onClose: () => void }) {
+  const [loading, setLoading] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!input.trim()) return;
-    const question = input.trim();
-    const answer = question.toUpperCase().includes("LTV")
-      ? "LTV는 집값을 기준으로 대출받을 수 있는 금액의 비율이에요. 집값이 1억 원이고 LTV가 70%라면 최대 7천만 원까지 가능하다는 뜻이에요."
-      : question.toUpperCase().includes("DSR")
-        ? "DSR은 연 소득 중에서 대출 원금과 이자를 갚는 데 쓰는 돈의 비율이에요. 숫자가 낮을수록 상환 부담이 적다는 뜻이에요."
-        : "어려운 금융 용어를 생활 속 예시와 함께 쉽게 설명해 드릴게요.";
-    setMessages((items) => [...items, { role: "user", text: question }, { role: "ai", text: answer }]);
-    setInput("");
-  };
+    const submit = async (event: FormEvent) => {
+      event.preventDefault();
+      if (!input.trim() || loading) return;
+      const question = input.trim();
+      setMessages((items) => [...items, { role: "user", text: question }]);
+      setInput("");
+      setLoading(true);
+      try {
+        const answer = await askTerm(question);
+        setMessages((items) => [...items, { role: "ai", text: answer || "답변을 만들지 못했어요." }]);
+      } catch {
+        setMessages((items) => [...items, { role: "ai", text: "서버에 연결하지 못했어요." }]);
+      } finally {
+        setLoading(false);
+      }
+    };
   return (
     <aside className="term-drawer" role="dialog" aria-modal="true" aria-label="용어 AI 챗봇">
       <header className="term-drawer-head">
