@@ -2,7 +2,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 
-from app.graph.bankpdf import *
+from all_db.API.bankpdf import *
 from state import SideState
 
 llm = ChatOllama(model="gemma4:e4b",num_ctx=8192)

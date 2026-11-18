@@ -1,11 +1,16 @@
 import sqlite3, json
 import os
-from datetime import datetime
+
+from dotenv import load_dotenv
 from langchain_chroma import Chroma
-from time import time
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from datetime import datetime
+import time
+
+from rag.rag_search import *
 
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "welfare.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "API", "welfare.db")
 conn = sqlite3.connect(DB_PATH)
 
 
@@ -72,14 +77,6 @@ print(len(lens), min(lens), max(lens))
 #conn.commit()
 """
 
-def get_store(collection_name: str) -> Chroma:
-    # 컬렉션(문서 묶음) 하나를 여는 함수
-    return Chroma(
-        collection_name=collection_name,
-        embedding_function=embeddings,
-        persist_directory=CHROMA_DIR,
-        collection_metadata={"hnsw:space": "cosine"},
-    )
 
 
 i = 15
@@ -92,6 +89,12 @@ for start in  range(0, len(rows), i):
         ids.append(serv_id)
         texts.append(build_text(d))
         metas.append(build_metadata(t, d))
+
+    vs = get_store("policy")
+
+    if not texts:
+        continue
+    vs.add_texts(texts = texts, metadatas = metas, ids = ids)
 
     conn.executemany("UPDATE policies SET embedded='Y' WHERE serv_id=?", [(j,) for j in ids])
     conn.commit()

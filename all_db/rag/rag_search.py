@@ -9,7 +9,7 @@ load_dotenv()
 api_key = os.getenv("google_api_key")
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", api_key=api_key)
 
-CHROMA_DIR = "./chroma_data"  # Chroma 데이터가 저장된 폴더
+CHROMA_DIR = "./all_db/chroma_data"  # Chroma 데이터가 저장된 폴더
 
 
 def get_store(collection_name: str) -> Chroma:

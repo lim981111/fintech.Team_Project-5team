@@ -62,7 +62,7 @@ def insert_data():
         time.sleep(30)               # 1분 창이 지나길 기다림
     print(f'완료. 저장된 청크 수 : {coll.count()}')
 
-insert_data()
+#insert_data()
 #print(coll.get())
 
 # 5. 검색기 버전으로 결과값 불러오기

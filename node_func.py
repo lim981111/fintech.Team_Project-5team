@@ -11,7 +11,7 @@ from datetime import datetime
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from state import State
-from rag.rag_search import search_docs
+from all_db.rag.rag_search import search_docs
 #from llm_config import init_llm_settings
 #from db_history import get_recent_history
 #from data.region import get_region_code, get_sido_code
@@ -108,6 +108,7 @@ def normal_answer_node(state: State):
         - 최대한 쉬운 단어와 문장으로 답변하세요.
         - 사용자가 힘들거나 짜증을 내면 해결책보다 공감과 위로를 먼저 해주세요.
         - [이전 대화]가 필요할 경우 반드시 참고해서 답변하세요
+        - 마크다운 문법(**, #, - 목록 기호 등)을 쓰지 말고 일반 문장으로 답하세요
         """
 
     human_prompt = "[질문]\n{question}\n\n[나이]\n{age}\n\n[이전 대화]\n{history}"
@@ -183,6 +184,7 @@ def rag_answer_node(state: State):
         - 반드시 존댓말을 사용하세요
         - 확실하지 않은 내용은 추측하지 마세요
         - 최대한 쉬운 단어와 문장으로 답변하세요
+        - 마크다운 문법(**, #, - 목록 기호 등)을 쓰지 말고 일반 문장으로 답하세요
         - [이전 대화]에서 이미 다룬 내용이라도 [정책]에 근거가 있을 때만 답하세요
 
         
@@ -220,6 +222,12 @@ def rag_answer_node(state: State):
         "history": state.get("history", "")
     })
     print(f"  검색 {time.perf_counter() - t:.1f}초")
+
+    if result.strip().strip('"\'') and policy_docs:
+        link = policy_docs[0].metadata.get("source", "")
+        if link:
+            result = result + f"\n\n자세한 내용: {link}"
+
     return {"answer": result}
 
 def check_answer(state: State):
@@ -268,6 +276,7 @@ def web_answer_node(state:State):
         - **사용자의 질문 의도를 최우선으로 파악하세요.** 예를들어 사용자가 아파트 구입을 원하는데, 검색된 정책이 비아파트 전용이거나 엉뚱한 조건이라면 과감하게 제외하거나 부가 설명으로만 짧게 언급하고, 진짜 아파트에 쓸 수 있는 정책(보금자리론, 디딤돌 등) 위주로 답변하세요.
         - 뜬금없는 정책을 메인으로 끌고 와서 "근데 이건 안 됩니다"라고 맥을 끊는 답변을 하지 마세요. 처음부터 사용자의 조건(아파트 구입 여부 등)에 맞는 실질적인 대출 상품을 중심으로 안내하세요.
         - URL은 링크 형식 없이 주소 글자 그대로 한 줄에 쓰세요
+        - 마크다운 문법(**, #, - 목록 기호 등)을 쓰지 말고 일반 문장으로 답하세요
 
         
         [사용자 정보]

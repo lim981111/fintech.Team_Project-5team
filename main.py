@@ -7,7 +7,7 @@ from langgraph.graph import START, END
 from node_func import *
 from sidebar_ai import *
 from state import *
-from app.DB import *
+from all_db.DB import *
 
 app = FastAPI()
 
