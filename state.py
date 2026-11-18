@@ -6,6 +6,7 @@ class State(TypedDict):
     question:str        #질문&유저상태
     answer:str          #AI답변
 
+    name: str
     age : int           #나이
     job : str           #직업
     monthly_income : int#월 소득
@@ -15,9 +16,14 @@ class State(TypedDict):
 
     policy : List[Any]  #취약계층 정책rag검색결과
     data : list[Any]    #금융정보 rag검색결과
-    history : List[Any] #최근 대화 내역
+
+    history : str #최근 대화 내역
+    search_query : str 
+
     contents : List[Any]#금융교육 콘텐츠
     language : str      #다국어 지원용
+
+
 
 
 def get_state():

@@ -1,10 +1,15 @@
+import os
+
+from dotenv import load_dotenv
 from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-EMBED_MODEL = "bge-m3"        # 자리표시자: 문서를 적재할 때 쓴 임베딩 모델과 같은 이름으로 바꾸세요
+
+load_dotenv()
+api_key = os.getenv("google_api_key")
+embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", api_key=api_key)
+
 CHROMA_DIR = "./chroma_data"  # Chroma 데이터가 저장된 폴더
-
-embeddings = OllamaEmbeddings(model=EMBED_MODEL)
 
 
 def get_store(collection_name: str) -> Chroma:

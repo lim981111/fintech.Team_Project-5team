@@ -16,11 +16,12 @@ BASE = "http://apis.data.go.kr/B554287/NationalWelfareInformationsV001"
 LIST_URL = f"{BASE}/NationalWelfarelistV001"
 DETAIL_URL = f"{BASE}/NationalWelfaredetailedV001"
 
-KEY = os.getenv("POLICY_API_KEY")
+# POLICY_API_KEY2
+KEY = os.getenv("POLICY_API_KEY2")
 if KEY and "%" in KEY:          # Encoding 키를 넣었어도 한 번 풀어서 사용
     KEY = unquote(KEY)
 
-# DB 파일: 이 스크립트와 같은 폴더에 생성 (어디서 실행해도 같은 파일을 씀)
+# DB 파일: 이 스크립트와 같은 폴더에 생성 (어디서 실행해도 같은 파일을 씀)  
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "welfare.db")
 
 PAGE_SIZE = 500                 # 목록 1회 최대 500건
@@ -67,6 +68,7 @@ def call(url, params):
         return None
 
     if res.status_code == 429:
+        print("  429 응답:", res.text[:200])
         raise QuotaExceeded
 
     try:

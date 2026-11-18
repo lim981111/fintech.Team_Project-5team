@@ -29,6 +29,12 @@ llama-index-embeddings-ollama
 pymupdf
 llama-index-readers-file
 
+#gemini
+langchain-google-genai
+llama-index-llms-google-genai
+llama-index-embeddings-google-genai
+
+
 
 # --- Database (MariaDB / MySQL 연동용) ---
 PyMySQL
