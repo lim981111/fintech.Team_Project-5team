@@ -19,9 +19,9 @@ rows = conn.execute(
     "WHERE detail_done = 'Y' AND embedded = 'N'",
 ).fetchall()
 
-serv_id, list_s, detail_s = rows[0]
-t = json.loads(list_s)
-d = json.loads(detail_s)
+#serv_id, list_s, detail_s = rows[0]
+#t = json.loads(list_s)
+#d = json.loads(detail_s)
 
 #print(d["servNm"])           
 #print(t["servDtlLink"])      
@@ -76,8 +76,6 @@ print(len(lens), min(lens), max(lens))
 #conn.execute("ALTER TABLE policies ADD COLUMN embedded TEXT NOT NULL DEFAULT 'N'")
 #conn.commit()
 """
-
-
 
 i = 15
 for start in  range(0, len(rows), i):

@@ -6,7 +6,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 
 load_dotenv()
-api_key = os.getenv("google_api_key")
+api_key = os.getenv("GOOGLE_API_KEY")
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", api_key=api_key)
 
 CHROMA_DIR = "./all_db/chroma_data"  # Chroma 데이터가 저장된 폴더

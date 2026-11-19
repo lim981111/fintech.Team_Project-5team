@@ -1,11 +1,15 @@
 from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
+from dotenv import load_dotenv
 
 from all_db.API.bankpdf import *
+from langchain_google_genai import ChatGoogleGenerativeAI
 from state import SideState
 
-llm = ChatOllama(model="gemma4:e4b",num_ctx=8192)
+load_dotenv()
+
+llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash-lite")
 
 def init_answer(state:SideState):
     print('RAG 정보 검색')

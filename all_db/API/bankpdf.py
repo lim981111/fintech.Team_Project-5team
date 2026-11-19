@@ -12,7 +12,7 @@ from llama_index.llms.google_genai import GoogleGenAI
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
 
 load_dotenv()
-api_key = os.getenv("google_api_key")
+api_key = os.getenv("GOOGLE_API_KEY")
 
 # 1. 모델등록, chunk size 등록
 Settings.llm = GoogleGenAI(model="gemini-3.8-flash", api_key=api_key)

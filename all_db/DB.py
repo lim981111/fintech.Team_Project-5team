@@ -144,3 +144,6 @@ def delete_chat(chat_id, user_id):
     deleted = cur.rowcount      # 지워진 행 수 (0이면 없는 방)
     conn.close()
     return deleted
+
+
+

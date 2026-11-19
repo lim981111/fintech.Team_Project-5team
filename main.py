@@ -145,3 +145,27 @@ def remove_chat(chat_id: int, user_id: int):
     if delete_chat(chat_id, user_id) == 0:
         raise HTTPException(status_code=404, detail="상담 기록을 찾을 수 없습니다")
     return {"ok": True}
+
+"""
+class UserCreate(BaseModel):
+    name: str
+    age: int
+    job: str
+    monthly_income: int
+    total_assets: int
+    household_size: int
+
+@app.post("/users")
+def create_user(req: UserCreate):
+    user_state = {
+            "name" : req.name,
+            "age": req.age,
+            "job": req.job,
+            "monthly_income": req.monthly_income,
+            "total_assets": req.total_assets,
+            "household_size": req.household_size
+        }
+
+    chat_id = create_chat(req.user_id, req.question[:20])
+    create_user
+"""
