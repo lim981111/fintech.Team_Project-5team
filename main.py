@@ -75,6 +75,13 @@ def get_chats(user_id : int) :
 def get_chat_messages(chat_id: int):
     return get_messages(chat_id)
 
+@app.get("/users/{user_id}")
+def read_user(user_id: int):
+    user = get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+    return {"name": user["name"]}
+
 # post 포장
 class ChatRequest(BaseModel):
     question: str
@@ -145,6 +152,25 @@ def remove_chat(chat_id: int, user_id: int):
     if delete_chat(chat_id, user_id) == 0:
         raise HTTPException(status_code=404, detail="상담 기록을 찾을 수 없습니다")
     return {"ok": True}
+
+
+@app.get("/edu/contents")
+def edus_list() :
+    i = list_mp4()
+
+    transformation = []
+    for j in i:
+        transformation.append ({
+                "id": j["contents_slno"],
+                "title" : j["title"],
+                "thumbnail": j["thumb_url"],
+                "video_url": j["video_url"],
+                "minutes": j["play_seconds"] // 60,
+                "source": EDU_ORG.get(j["org_code"], "기타")
+        })
+
+    return transformation
+
 
 """
 class UserCreate(BaseModel):
