@@ -1,3 +1,7 @@
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,6 +15,8 @@ from all_db.DB import *
 
 app = FastAPI()
 
+BASE = os.path.dirname(os.path.abspath(__file__))
+DIST = os.path.join(BASE, "dist")
 
 
 app.add_middleware(
@@ -21,6 +27,7 @@ app.add_middleware(
 )
 
 #app.mount("/view", StaticFiles(directory="view"))
+app.mount("/assets", StaticFiles(directory=os.path.join(DIST, "assets")))
 
 wf = get_state()
 
@@ -65,6 +72,7 @@ init_db()
 
 @app.get("/")
 def main():
+    #return FileResponse(os.path.join(DIST, "index.html"))
     return RedirectResponse("http://localhost:8000/docs")
 
 @app.get("/chats")
